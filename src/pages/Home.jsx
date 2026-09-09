@@ -1,0 +1,21 @@
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+
+const stories = [
+  ['Your story', '+', 'story-own'], ['Maya Chen', 'MC', 'avatar-maya'], ['Ryan Cole', 'RC', 'avatar-ryan'], ['Sam Iqbal', 'SI', 'avatar-sam'], ['Alex Rivera', 'AR', 'avatar-alex']
+]
+
+export default function Home({ active = 'Home' }) {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const initials = user?.displayName?.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'U'
+  return <div className="page-wrap">
+    <header className="topbar"><div><p className="eyebrow">Tuesday, September 8</p><h1>{active === 'Home' ? `Good morning, ${user?.displayName?.split(' ')[0] || 'there'}` : active}</h1></div><div className="topbar-actions"><button className="search-pill">⌕ <span>Search ConnectHub</span><kbd>⌘ K</kbd></button><button className="notification-button" aria-label="Notifications">♧<i /></button><div className="mini-avatar avatar-jules">{initials}</div></div></header>
+    {active !== 'Home' ? <section className="empty-panel"><div className="empty-symbol">{active === 'Chats' ? '◌' : active === 'Media' ? '▧' : active === 'Notifications' ? '♧' : '◉'}</div><h2>{active}</h2><p>This space is ready for the next phase of ConnectHub.</p></section> : <>
+      <section className="stories-section"><div className="section-heading"><h2>Stories</h2><button className="text-button">View all <span>→</span></button></div><div className="story-row">{stories.map(([name, initials, color]) => <button className="story-card" key={name}><span className={`story-avatar ${color}`}>{initials}</span><span>{name}</span></button>)}</div></section>
+      <div className="feed-layout"><section className="feed-column"><div className="composer"><div className="mini-avatar avatar-jules">{initials}</div><button className="composer-input">Share something with your circle...</button><button className="composer-action" onClick={() => navigate('/signup')}>＋</button></div><Post author="Maya Chen" handle="mayachen" avatar="MC" color="avatar-maya" time="34 min ago" caption="A quiet morning, a clear head, and nowhere else to be. Sometimes the little rituals are the whole point." imageClass="post-sunrise" likes="128" comments="14" /><Post author="Ryan Cole" handle="ryancole" avatar="RC" color="avatar-ryan" time="2 hrs ago" caption="Found this gem tucked away on my camera roll." imageClass="post-lake" likes="86" comments="7" /></section><aside className="right-rail"><section className="rail-panel"><div className="section-heading"><h2>People to connect</h2><button className="dots-button">•••</button></div>{[['Elena Park','elenapark','EP','avatar-elena'],['Arjun Mehta','arjunm','AM','avatar-arjun'],['Nora Williams','noraw','NW','avatar-nora']].map(([name, handle, initials, color]) => <div className="person-row" key={handle}><div className={`mini-avatar ${color}`}>{initials}</div><div><strong>{name}</strong><span>@{handle}</span></div><button className="follow-button">Follow</button></div>)}</section><section className="rail-note"><span className="note-icon">✦</span><div><strong>Keep it meaningful</strong><p>Connect with people who make your world a little brighter.</p></div></section></aside></div>
+    </>}
+  </div>
+}
+
+function Post({ author, handle, avatar, color, time, caption, imageClass, likes, comments }) { return <article className="post-card"><div className="post-header"><div className={`mini-avatar ${color}`}>{avatar}</div><div className="post-author"><strong>{author}</strong><span>@{handle} · {time}</span></div><button className="dots-button">•••</button></div><p className="post-caption">{caption}</p><div className={`post-image ${imageClass}`}><span>{imageClass === 'post-sunrise' ? 'FIELD NOTES / 08.09' : 'LAKE COMO / 2026'}</span></div><div className="post-actions"><button>♡ <span>{likes}</span></button><button>◌ <span>{comments}</span></button><button>↗</button><button className="save-action">⌑</button></div></article> }
