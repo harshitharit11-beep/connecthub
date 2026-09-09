@@ -46,6 +46,13 @@ function validUsername(username) {
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
+app.get('/api/render-test', (_req, res) => {
+  res.json({
+    status: 'working',
+    message: 'Render is running the latest ConnectHub code'
+  })
+})
+
 app.get('/api/auth/me', async (req, res, next) => {
   try {
     if (!req.session.userId) return res.status(401).json({ error: 'Not authenticated' })
