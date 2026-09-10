@@ -4,9 +4,9 @@ import cors from 'cors'
 import express from 'express'
 import session from 'express-session'
 import multer from 'multer'
-import fs from 'node:fs/promises'
-import path from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { v2 as cloudinary } from 'cloudinary'
+import streamifier from 'streamifier'
 import { addFriend, createMessage, createPost, createUser, deletePost, findUserById, findUserByUsername, initializeStore, listFriends, listMessages, listPosts, searchUsers, sessionStore, usingDatabase } from './store.js'
 
 const app = express()
@@ -21,17 +21,16 @@ const allowedOrigins = [...new Set([
   'https://connecthub-08.netlify.app',
   ...configuredOrigins,
 ])]
-const uploadDirectory = path.join(process.cwd(), 'server', 'uploads')
-const upload = multer({
-  dest: uploadDirectory,
+const mediaUpload = multer({
+  storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 },
-  fileFilter: (_req, file, callback) => callback((['video/mp4', 'image/png', 'image/jpeg'].includes(file.mimetype) || ['.mp4', '.png', '.jpg', '.jpeg'].includes(path.extname(file.originalname).toLowerCase())) ? null : new Error('File type is not supported.'), false),
+  fileFilter: (_req, file, callback) => callback(['video/mp4', 'image/png', 'image/jpeg', 'image/jpg'].includes(file.mimetype) ? null : new Error('File type is not supported.'), false),
 })
+cloudinary.config({ cloud_name: process.env.CLOUDINARY_CLOUD_NAME, api_key: process.env.CLOUDINARY_API_KEY, api_secret: process.env.CLOUDINARY_API_SECRET })
 
 app.set('trust proxy', 1)
 app.use(cors({ origin: allowedOrigins, credentials: true }))
 app.use(express.json({ limit: '1mb' }))
-app.use('/uploads', express.static(uploadDirectory))
 app.use(session({
   name: 'connecthub.sid',
   secret: process.env.SESSION_SECRET || 'connecthub-local-development-secret',
@@ -57,6 +56,15 @@ function validUsername(username) {
 async function authenticatedUser(req) {
   if (!req.session.userId) return null
   return findUserById(req.session.userId)
+}
+
+async function requireAuth(req, res, next) {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) return res.status(401).json({ error: 'Not authenticated' })
+    req.authenticatedUser = user
+    next()
+  } catch (error) { next(error) }
 }
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
@@ -173,6 +181,22 @@ app.post('/api/friends/:userId', async (req, res, next) => {
   } catch (error) { next(error) }
 })
 
+app.post('/api/media/upload', requireAuth, mediaUpload.single('media'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No media file selected.' })
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) return res.status(503).json({ error: 'Media storage is not configured on the server.' })
+    const resourceType = req.file.mimetype.startsWith('video/') ? 'video' : 'image'
+    const result = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream({ resource_type: resourceType, folder: 'connecthub/media' }, (error, value) => error ? reject(error) : resolve(value))
+      streamifier.createReadStream(req.file.buffer).pipe(uploadStream)
+    })
+    res.json({ success: true, url: result.secure_url, publicId: result.public_id, type: resourceType, mimeType: req.file.mimetype, originalName: req.file.originalname, size: req.file.size })
+  } catch (error) {
+    console.error('Media upload error:', error)
+    next(error)
+  }
+})
+
 app.get('/api/messages/:userId', async (req, res, next) => {
   try {
     const user = await authenticatedUser(req)
@@ -182,35 +206,35 @@ app.get('/api/messages/:userId', async (req, res, next) => {
   } catch (error) { next(error) }
 })
 
-app.post('/api/messages/:userId', upload.single('media'), async (req, res, next) => {
+app.post('/api/messages/:userId', async (req, res, next) => {
   try {
     const user = await authenticatedUser(req)
     if (!user) return res.status(401).json({ error: 'Not authenticated' })
     const recipient = await findUserById(req.params.userId)
     if (!recipient) return res.status(404).json({ error: 'Friend not found.' })
     const body = String(req.body.body || '').trim()
-    if (!body && !req.file) return res.status(400).json({ error: 'Write a message or attach a JPG, PNG, or MP4 file.' })
+    const mediaUrl = typeof req.body.mediaUrl === 'string' ? req.body.mediaUrl.trim() : ''
+    const mediaType = typeof req.body.mediaType === 'string' ? req.body.mediaType : null
+    const fileName = typeof req.body.fileName === 'string' ? req.body.fileName : null
+    if (!body && !mediaUrl) return res.status(400).json({ error: 'Write a message or attach a JPG, PNG, or MP4 file.' })
+    if (mediaUrl && !['image', 'video'].includes(req.body.type)) return res.status(400).json({ error: 'A valid media type is required.' })
     const message = {
       id: randomUUID(), senderId: user.id, recipientId: recipient.id, body: body || null,
-      mediaUrl: req.file ? `/uploads/${req.file.filename}` : null, mediaType: req.file?.mimetype || null, createdAt: new Date().toISOString(),
+      mediaUrl: mediaUrl || null, mediaType, fileName, type: req.body.type || 'text', createdAt: new Date().toISOString(),
     }
     await createMessage(message)
     res.status(201).json({ message })
   } catch (error) {
-    if (req.file) await fs.rm(req.file.path, { force: true }).catch(() => {})
-    if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'MP4 videos must be 50 MB or smaller.' })
-    if (error.message?.includes('File type')) return res.status(400).json({ error: 'Only JPG, PNG, and MP4 files are supported.' })
     next(error)
   }
 })
 
 app.use((error, _req, res, _next) => {
   console.error(error)
-  if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'MP4 videos must be 50 MB or smaller.' })
-  if (error.message === 'File type is not supported.') return res.status(400).json({ error: 'Only JPG, PNG, and MP4 files are supported.' })
+  if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'File is too large. Maximum size is 50 MB.' })
+  if (error.message === 'File type is not supported.') return res.status(400).json({ error: 'Only JPG, PNG and MP4 files are supported.' })
   res.status(500).json({ error: 'Internal server error.' })
 })
 
-await fs.mkdir(uploadDirectory, { recursive: true })
 await initializeStore()
 app.listen(port, '0.0.0.0', () => console.log(`ConnectHub API listening on port ${port} (${usingDatabase ? 'PostgreSQL' : 'JSON fallback'})`))

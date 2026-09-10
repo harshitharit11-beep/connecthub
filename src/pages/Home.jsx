@@ -97,6 +97,7 @@ function PersistentChatView() {
   const [media, setMedia] = useState(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [uploadingMedia, setUploadingMedia] = useState(false)
 
   useEffect(() => {
     fetch(`${apiBaseUrl}/friends`, { credentials: 'include' })
@@ -160,18 +161,36 @@ function PersistentChatView() {
     event.preventDefault()
     if (!friend || (!body.trim() && !media) || busy) return
     setBusy(true); setError('')
-    const form = new FormData()
-    if (body.trim()) form.append('body', body)
-    if (media) form.append('media', media)
     try {
-      const data = await readResponse(await fetch(`${apiBaseUrl}/messages/${friend.id}`, { method: 'POST', credentials: 'include', body: form }))
+      let uploadedMedia = null
+      if (media) {
+        setUploadingMedia(true)
+        const form = new FormData()
+        form.append('media', media)
+        uploadedMedia = await readResponse(await fetch(`${apiBaseUrl}/media/upload`, { method: 'POST', credentials: 'include', body: form }))
+        setUploadingMedia(false)
+      }
+      const data = await readResponse(await fetch(`${apiBaseUrl}/messages/${friend.id}`, {
+        method: 'POST', credentials: 'include', headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: body.trim() || null, mediaUrl: uploadedMedia?.url || null, mediaType: uploadedMedia?.mimeType || null, fileName: uploadedMedia?.originalName || null, type: uploadedMedia?.type || 'text' }),
+      }))
       setMessages((current) => [...current, data.message]); setBody(''); setMedia(null); event.target.reset()
-    } catch (cause) { setError(cause.message) } finally { setBusy(false) }
+    } catch (cause) { setError(cause.message) } finally { setUploadingMedia(false); setBusy(false) }
+  }
+
+  function selectMedia(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'video/mp4']
+    if (!allowedTypes.includes(file.type)) return setError('Only JPG, PNG and MP4 files are allowed.')
+    if (file.size > 50 * 1024 * 1024) return setError('File is too large. Maximum size is 50 MB.')
+    setError(''); setMedia(file)
   }
 
   function mediaUrl(message) { return `${apiBaseUrl.replace(/\/api$/, '')}${message.mediaUrl || message.videoUrl}` }
 
-  return <div className="page-wrap"><header className="topbar"><div><p className="eyebrow">Private messages</p><h1>Chats</h1></div></header><div className="chat-layout"><section className="chat-friends"><label className="chat-search">⌕<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name or username" /></label>{query.trim().length >= 2 && results.map((person) => <div className="friend-result" key={person.id}><span className="mini-avatar avatar-user">{initialsFor(person.displayName)}</span><span><strong>{person.displayName}</strong><small>@{person.username}</small></span><button className="friend-action" type="button" onClick={() => friends.some((item) => item.id === person.id) ? selectFriend(person) : addFriend(person)}>{friends.some((item) => item.id === person.id) ? 'Open' : 'Add'}</button></div>)}<h3 className="friends-title">My friends</h3>{friends.map((person) => <button className={`friend-result ${friend?.id === person.id ? 'selected' : ''}`} key={person.id} type="button" onClick={() => selectFriend(person)}><span className="mini-avatar avatar-user">{initialsFor(person.displayName)}</span><span><strong>{person.displayName}</strong><small>@{person.username}</small></span></button>)}{!friends.length && !results.length && <p className="chat-hint">Search for someone and add them as a friend.</p>}</section><section className="chat-panel">{friend ? <><div className="chat-heading"><div className="mini-avatar avatar-user">{initialsFor(friend.displayName)}</div><div><strong>{friend.displayName}</strong><span>@{friend.username}</span></div></div><div className="message-list">{messages.length ? messages.map((message) => <div className={`message ${message.senderId === user.id ? 'mine' : ''}`} key={message.id}>{message.body && <p>{message.body}</p>}{(message.mediaUrl || message.videoUrl) && (message.mediaType || 'video/mp4').startsWith('image/') ? <img src={mediaUrl(message)} alt="Shared attachment" loading="lazy" /> : (message.mediaUrl || message.videoUrl) && <video controls preload="metadata" src={mediaUrl(message)} />}</div>) : <p className="chat-hint">No messages yet. Say hello.</p>}</div><form className="message-form" onSubmit={sendMessage}><input value={body} onChange={(event) => setBody(event.target.value)} placeholder="Write a message..." /><label className="video-button">＋ Media<input type="file" accept="image/png,image/jpeg,video/mp4,.png,.jpg,.jpeg,.mp4" onChange={(event) => setMedia(event.target.files[0] || null)} /></label><button className="primary-button" type="submit" disabled={busy || (!body.trim() && !media)}>{busy ? 'Sending...' : 'Send'} <span>→</span></button></form></> : <div className="chat-placeholder"><span>◌</span><h2>Your conversations</h2><p>Add a friend to start messaging.</p></div>}</section></div>{error && <p className="form-error feed-error">{error}</p>}</div>
+  return <div className="page-wrap"><header className="topbar"><div><p className="eyebrow">Private messages</p><h1>Chats</h1></div></header><div className="chat-layout"><section className="chat-friends"><label className="chat-search">⌕<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name or username" /></label>{query.trim().length >= 2 && results.map((person) => <div className="friend-result" key={person.id}><span className="mini-avatar avatar-user">{initialsFor(person.displayName)}</span><span><strong>{person.displayName}</strong><small>@{person.username}</small></span><button className="friend-action" type="button" onClick={() => friends.some((item) => item.id === person.id) ? selectFriend(person) : addFriend(person)}>{friends.some((item) => item.id === person.id) ? 'Open' : 'Add'}</button></div>)}<h3 className="friends-title">My friends</h3>{friends.map((person) => <button className={`friend-result ${friend?.id === person.id ? 'selected' : ''}`} key={person.id} type="button" onClick={() => selectFriend(person)}><span className="mini-avatar avatar-user">{initialsFor(person.displayName)}</span><span><strong>{person.displayName}</strong><small>@{person.username}</small></span></button>)}{!friends.length && !results.length && <p className="chat-hint">Search for someone and add them as a friend.</p>}</section><section className="chat-panel">{friend ? <><div className="chat-heading"><div className="mini-avatar avatar-user">{initialsFor(friend.displayName)}</div><div><strong>{friend.displayName}</strong><span>@{friend.username}</span></div></div><div className="message-list">{messages.length ? messages.map((message) => <div className={`message ${message.senderId === user.id ? 'mine' : ''}`} key={message.id}>{message.body && <p>{message.body}</p>}{(message.mediaUrl || message.videoUrl) && (message.type === 'image' || message.mediaType?.startsWith('image/')) ? <img src={mediaUrl(message)} alt={message.fileName || 'Shared image'} loading="lazy" /> : (message.mediaUrl || message.videoUrl) && <video controls preload="metadata" src={mediaUrl(message)} />}</div>) : <p className="chat-hint">No messages yet. Say hello.</p>}</div><form className="message-form" onSubmit={sendMessage}><input value={body} onChange={(event) => setBody(event.target.value)} placeholder="Write a message..." /><label className={`video-button ${busy ? 'disabled' : ''}`}>＋ Media<input type="file" accept="image/jpeg,image/png,image/jpg,video/mp4" disabled={busy} onChange={selectMedia} /></label>{media && <small className="selected-media">{media.name}</small>}{uploadingMedia && <small className="uploading-media">Uploading...</small>}<button className="primary-button" type="submit" disabled={busy || (!body.trim() && !media)}>{busy ? (uploadingMedia ? 'Uploading...' : 'Sending...') : 'Send'} <span>→</span></button></form></> : <div className="chat-placeholder"><span>◌</span><h2>Your conversations</h2><p>Add a friend to start messaging.</p></div>}</section></div>{error && <p className="form-error feed-error">{error}</p>}</div>
 }
 
 function ChatView() {

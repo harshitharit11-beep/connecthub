@@ -13,6 +13,7 @@
   "dependencies": {
     "@vitejs/plugin-react": "latest",
     "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.11.0",
     "connect-pg-simple": "^10.0.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
@@ -23,6 +24,7 @@
     "react": "latest",
     "react-dom": "latest",
     "react-router-dom": "latest",
+    "streamifier": "^0.1.1",
     "vite": "latest"
   },
   "devDependencies": {

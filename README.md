@@ -1,6 +1,6 @@
 # ConnectHub
 
-ConnectHub is a Vite + React frontend with an Express API for authentication, real posts, friend search, direct messages, and media messages. The current implementation includes signup, login, logout, session restore, creating posts, loading the real feed, deleting owned posts, searching members, and private chat. Chats support JPG, PNG, and MP4 uploads up to 50 MB.
+ConnectHub is a Vite + React frontend with an Express API for authentication, real posts, friend search, direct messages, and media messages. The current implementation includes signup, login, logout, session restore, creating posts, loading the real feed, deleting owned posts, searching members, and private chat. Chats support JPG, PNG, and MP4 uploads up to 50 MB through Cloudinary.
 
 ## Local development
 
@@ -21,7 +21,7 @@ Local development has a JSON user store and the default in-memory Express sessio
 - `messages`: id, sender, recipient, optional text, optional media URL/type, and creation time.
 - `friendships`: bidirectional user relationships and creation time.
 
-The JSON fallback stores posts in `server/data/posts.json`, messages in `server/data/messages.json`, and friendships in `server/data/friendships.json`. Uploaded media is stored under `server/uploads`; production should use persistent object storage instead of the Render filesystem.
+The JSON fallback stores posts in `server/data/posts.json`, messages in `server/data/messages.json`, and friendships in `server/data/friendships.json`. Uploaded media is stored persistently in Cloudinary.
 
 ## Netlify deployment
 
@@ -45,6 +45,9 @@ Set these environment variables in Render:
 - `SESSION_SECRET` = a long random secret generated in Render
 - `FRONTEND_URL` = the exact Netlify URL, for example `https://connecthub.netlify.app`
 - `DATABASE_URL` = the Internal Database URL from a persistent Render PostgreSQL database
+- `CLOUDINARY_CLOUD_NAME` = your Cloudinary cloud name
+- `CLOUDINARY_API_KEY` = your Cloudinary API key
+- `CLOUDINARY_API_SECRET` = your Cloudinary API secret
 
 Render supplies `PORT` automatically. The server listens on `0.0.0.0` and uses that value.
 

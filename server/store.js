@@ -41,11 +41,15 @@ export async function initializeStore() {
         body TEXT,
         video_url TEXT,
         media_type TEXT,
+        message_type TEXT NOT NULL DEFAULT 'text',
+        file_name TEXT,
         created_at TIMESTAMPTZ NOT NULL,
         CHECK (body IS NOT NULL OR video_url IS NOT NULL)
       )
     `)
     await pool.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_type TEXT')
+    await pool.query("ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_type TEXT NOT NULL DEFAULT 'text'")
+    await pool.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS file_name TEXT')
     await pool.query(`
       CREATE TABLE IF NOT EXISTS friendships (
         user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -212,8 +216,8 @@ export async function listMessages(userId, otherUserId) {
 export async function createMessage(message) {
   if (pool) {
     await pool.query(
-      'INSERT INTO messages (id, sender_id, recipient_id, body, video_url, media_type, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [message.id, message.senderId, message.recipientId, message.body, message.mediaUrl, message.mediaType, message.createdAt],
+      'INSERT INTO messages (id, sender_id, recipient_id, body, video_url, media_type, message_type, file_name, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      [message.id, message.senderId, message.recipientId, message.body, message.mediaUrl, message.mediaType, message.type || 'text', message.fileName, message.createdAt],
     )
     return message
   }
@@ -280,6 +284,8 @@ function fromDatabaseMessage(row) {
     body: row.body,
     mediaUrl: row.video_url,
     mediaType: row.media_type || (row.video_url ? 'video/mp4' : null),
+    type: row.message_type || (row.video_url ? (row.media_type?.startsWith('image/') ? 'image' : 'video') : 'text'),
+    fileName: row.file_name || null,
     createdAt: row.created_at,
     sender: { username: row.sender_username, displayName: row.sender_display_name },
     recipient: { username: row.recipient_username, displayName: row.recipient_display_name },
