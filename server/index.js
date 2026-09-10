@@ -4,7 +4,7 @@ import cors from 'cors'
 import express from 'express'
 import session from 'express-session'
 import { randomUUID } from 'node:crypto'
-import { createUser, findUserById, findUserByUsername, initializeStore, sessionStore, usingDatabase } from './store.js'
+import { createPost, createUser, deletePost, findUserById, findUserByUsername, initializeStore, listPosts, sessionStore, usingDatabase } from './store.js'
 
 const app = express()
 const port = Number(process.env.PORT || 3001)
@@ -42,6 +42,11 @@ function publicUser(user) {
 
 function validUsername(username) {
   return /^[a-zA-Z0-9_]{3,20}$/.test(username)
+}
+
+async function authenticatedUser(req) {
+  if (!req.session.userId) return null
+  return findUserById(req.session.userId)
 }
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
@@ -99,6 +104,33 @@ app.post('/api/auth/login', async (req, res, next) => {
 
 app.post('/api/auth/logout', (req, res, next) => {
   req.session.destroy((error) => error ? next(error) : res.status(204).end())
+})
+
+app.get('/api/posts', async (_req, res, next) => {
+  try { res.json({ posts: await listPosts() }) } catch (error) { next(error) }
+})
+
+app.post('/api/posts', async (req, res, next) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) return res.status(401).json({ error: 'Not authenticated' })
+    const body = String(req.body.body || '').trim()
+    if (!body) return res.status(400).json({ error: 'Write something before posting.' })
+    if (body.length > 500) return res.status(400).json({ error: 'Posts must be 500 characters or fewer.' })
+    const post = { id: randomUUID(), userId: user.id, body, createdAt: new Date().toISOString() }
+    await createPost(post)
+    res.status(201).json({ post: { ...post, user: publicUser(user) } })
+  } catch (error) { next(error) }
+})
+
+app.delete('/api/posts/:id', async (req, res, next) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) return res.status(401).json({ error: 'Not authenticated' })
+    const removed = await deletePost(req.params.id, user.id)
+    if (!removed) return res.status(404).json({ error: 'Post not found.' })
+    res.status(204).end()
+  } catch (error) { next(error) }
 })
 
 app.use((error, _req, res, _next) => {

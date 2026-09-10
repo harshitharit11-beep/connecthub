@@ -1,6 +1,6 @@
 # ConnectHub
 
-ConnectHub is a Vite + React frontend with an Express authentication API. The current implementation includes signup, login, logout, session restore, and the existing social-feed UI. The Chats, messages, photo uploads, and video uploads are currently UI placeholders; there are no backend routes or storage implementation for those features yet.
+ConnectHub is a Vite + React frontend with an Express authentication and social-post API. The current implementation includes signup, login, logout, session restore, creating posts, loading the real feed, and deleting the signed-in user's own posts. Chats, messages, photo uploads, and video uploads remain UI placeholders.
 
 ## Local development
 
@@ -14,11 +14,12 @@ Open `http://localhost:5173`. With the example environment file, the frontend ca
 
 ## Storage and production requirements
 
-Local development has a JSON user store and the default in-memory Express session store. Render's filesystem and process memory are not durable across restarts, so production must set `DATABASE_URL` to a persistent PostgreSQL database. When that variable is present, the API automatically creates the `users` and `session` tables and uses PostgreSQL for both users and sessions. The only current table is:
+Local development has a JSON user store and the default in-memory Express session store. Render's filesystem and process memory are not durable across restarts, so production must set `DATABASE_URL` to a persistent PostgreSQL database. When that variable is present, the API automatically creates the `users`, `posts`, and `session` tables and uses PostgreSQL for both data and sessions. The current tables are:
 
 - `users`: id, username, normalized username, display name, bcrypt password hash, profile image value, and creation time.
+- `posts`: id, owning user id, body, and creation time.
 
-The current project does not upload or store photos/videos and has no chat/message data model. Those features need separate API routes, tables, and object storage before their UI can be production-ready.
+The JSON fallback stores posts in `server/data/posts.json`. The current project does not upload or store photos/videos and has no chat/message data model. Those features need separate API routes, tables, and object storage before their UI can be production-ready.
 
 ## Netlify deployment
 
