@@ -20,7 +20,7 @@ export default function AppLayout() {
         <nav className="primary-nav" aria-label="Main navigation">
           {navItems.map(([label, path, icon]) => <NavLink key={label} to={path} className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}><span className="nav-icon">{icon}</span>{label}</NavLink>)}
         </nav>
-        <div className="sidebar-footer"><div className="mini-avatar avatar-jules">{initials}</div><div><strong>{user.displayName}</strong><span>@{user.username}</span></div><button className="icon-button" onClick={logout} aria-label="Log out" title="Log out">↪</button></div>
+        <div className="sidebar-footer"><div className="mini-avatar avatar-user">{initials}</div><div><strong>{user.displayName}</strong><span>@{user.username}</span></div><button className="icon-button" onClick={logout} aria-label="Log out" title="Log out">↪</button></div>
       </aside>
       <main className="main-content"><Outlet /></main>
       <nav className="mobile-nav" aria-label="Mobile navigation">

@@ -3,8 +3,11 @@ import bcrypt from 'bcryptjs'
 import cors from 'cors'
 import express from 'express'
 import session from 'express-session'
+import multer from 'multer'
+import fs from 'node:fs/promises'
+import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { createPost, createUser, deletePost, findUserById, findUserByUsername, initializeStore, listPosts, sessionStore, usingDatabase } from './store.js'
+import { createMessage, createPost, createUser, deletePost, findUserById, findUserByUsername, initializeStore, listMessages, listPosts, searchUsers, sessionStore, usingDatabase } from './store.js'
 
 const app = express()
 const port = Number(process.env.PORT || 3001)
@@ -18,10 +21,17 @@ const allowedOrigins = [...new Set([
   'https://connecthub-08.netlify.app',
   ...configuredOrigins,
 ])]
+const uploadDirectory = path.join(process.cwd(), 'server', 'uploads')
+const upload = multer({
+  dest: uploadDirectory,
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (_req, file, callback) => callback((file.mimetype === 'video/mp4' || path.extname(file.originalname).toLowerCase() === '.mp4') ? null : new Error('File type is not supported.'), false),
+})
 
 app.set('trust proxy', 1)
 app.use(cors({ origin: allowedOrigins, credentials: true }))
 app.use(express.json({ limit: '1mb' }))
+app.use('/uploads', express.static(uploadDirectory))
 app.use(session({
   name: 'connecthub.sid',
   secret: process.env.SESSION_SECRET || 'connecthub-local-development-secret',
@@ -133,8 +143,51 @@ app.delete('/api/posts/:id', async (req, res, next) => {
   } catch (error) { next(error) }
 })
 
+app.get('/api/users/search', async (req, res, next) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) return res.status(401).json({ error: 'Not authenticated' })
+    const query = String(req.query.q || '').trim()
+    if (query.length < 2) return res.json({ users: [] })
+    res.json({ users: await searchUsers(query, user.id) })
+  } catch (error) { next(error) }
+})
+
+app.get('/api/messages/:userId', async (req, res, next) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) return res.status(401).json({ error: 'Not authenticated' })
+    if (!await findUserById(req.params.userId)) return res.status(404).json({ error: 'Friend not found.' })
+    res.json({ messages: await listMessages(user.id, req.params.userId) })
+  } catch (error) { next(error) }
+})
+
+app.post('/api/messages/:userId', upload.single('video'), async (req, res, next) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) return res.status(401).json({ error: 'Not authenticated' })
+    const recipient = await findUserById(req.params.userId)
+    if (!recipient) return res.status(404).json({ error: 'Friend not found.' })
+    const body = String(req.body.body || '').trim()
+    if (!body && !req.file) return res.status(400).json({ error: 'Write a message or attach an MP4 video.' })
+    const message = {
+      id: randomUUID(), senderId: user.id, recipientId: recipient.id, body: body || null,
+      videoUrl: req.file ? `/uploads/${req.file.filename}` : null, createdAt: new Date().toISOString(),
+    }
+    await createMessage(message)
+    res.status(201).json({ message })
+  } catch (error) {
+    if (req.file) await fs.rm(req.file.path, { force: true }).catch(() => {})
+    if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'MP4 videos must be 50 MB or smaller.' })
+    if (error.message?.includes('File type')) return res.status(400).json({ error: 'Only MP4 video files are supported.' })
+    next(error)
+  }
+})
+
 app.use((error, _req, res, _next) => {
   console.error(error)
+  if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'MP4 videos must be 50 MB or smaller.' })
+  if (error.message === 'File type is not supported.') return res.status(400).json({ error: 'Only MP4 video files are supported.' })
   res.status(500).json({ error: 'Internal server error.' })
 })
 
