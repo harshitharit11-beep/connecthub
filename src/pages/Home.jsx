@@ -32,7 +32,7 @@ function formatTime(value) {
 }
 
 export default function Home({ active = 'Home' }) {
-  if (active === 'Chats') return <ChatView />
+  if (active === 'Chats') return <PersistentChatView />
   const { user } = useAuth()
   const [posts, setPosts] = useState([])
   const [body, setBody] = useState('')
@@ -84,6 +84,94 @@ export default function Home({ active = 'Home' }) {
 function Post({ post, currentUserId, onDelete }) {
   const owner = post.user?.id === currentUserId
   return <article className="post-card"><div className="post-header"><div className="mini-avatar avatar-user">{initialsFor(post.user?.displayName)}</div><div className="post-author"><strong>{post.user?.displayName}</strong><span>@{post.user?.username} · {formatTime(post.createdAt)}</span></div>{owner && <button className="dots-button" type="button" onClick={() => onDelete(post.id)} title="Delete post" aria-label="Delete post">×</button>}</div><p className="post-caption">{post.body}</p></article>
+}
+
+function PersistentChatView() {
+  const { user } = useAuth()
+  const [query, setQuery] = useState('')
+  const [friends, setFriends] = useState([])
+  const [results, setResults] = useState([])
+  const [friend, setFriend] = useState(null)
+  const [messages, setMessages] = useState([])
+  const [body, setBody] = useState('')
+  const [media, setMedia] = useState(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    fetch(`${apiBaseUrl}/friends`, { credentials: 'include' })
+      .then(readResponse)
+      .then((data) => {
+        const savedId = window.localStorage.getItem('connecthub.selectedFriend')
+        const savedFriend = (data.friends || []).find((item) => item.id === savedId)
+        setFriends(data.friends || [])
+        if (savedFriend) setFriend(savedFriend)
+      })
+      .catch((cause) => setError(cause.message))
+  }, [])
+
+  useEffect(() => {
+    if (query.trim().length < 2) { setResults([]); return undefined }
+    const controller = new AbortController()
+    const timer = setTimeout(() => fetch(`${apiBaseUrl}/users/search?q=${encodeURIComponent(query)}`, { credentials: 'include', signal: controller.signal })
+      .then(readResponse).then((data) => setResults(data.users || []))
+      .catch((cause) => { if (cause.name !== 'AbortError') setError(cause.message) }), 250)
+    return () => { clearTimeout(timer); controller.abort() }
+  }, [query])
+
+  useEffect(() => {
+    if (!friend) return undefined
+    window.localStorage.setItem('connecthub.selectedFriend', friend.id)
+    let cancelled = false
+    async function refreshMessages() {
+      if (document.hidden) return
+      try {
+        const data = await readResponse(await fetch(`${apiBaseUrl}/messages/${friend.id}`, { credentials: 'include' }))
+        if (!cancelled) setMessages(data.messages || [])
+      } catch (cause) {
+        if (!cancelled) setError(cause.message)
+      }
+    }
+    refreshMessages()
+    const interval = window.setInterval(refreshMessages, 3000)
+    window.addEventListener('focus', refreshMessages)
+    document.addEventListener('visibilitychange', refreshMessages)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+      window.removeEventListener('focus', refreshMessages)
+      document.removeEventListener('visibilitychange', refreshMessages)
+    }
+  }, [friend])
+
+  function selectFriend(person) {
+    setFriend(person); setQuery(''); setResults([]); setError('')
+  }
+
+  async function addFriend(person) {
+    try {
+      const data = await readResponse(await fetch(`${apiBaseUrl}/friends/${person.id}`, { method: 'POST', credentials: 'include' }))
+      setFriends((current) => current.some((item) => item.id === data.friend.id) ? current : [...current, data.friend])
+      selectFriend(data.friend)
+    } catch (cause) { setError(cause.message) }
+  }
+
+  async function sendMessage(event) {
+    event.preventDefault()
+    if (!friend || (!body.trim() && !media) || busy) return
+    setBusy(true); setError('')
+    const form = new FormData()
+    if (body.trim()) form.append('body', body)
+    if (media) form.append('media', media)
+    try {
+      const data = await readResponse(await fetch(`${apiBaseUrl}/messages/${friend.id}`, { method: 'POST', credentials: 'include', body: form }))
+      setMessages((current) => [...current, data.message]); setBody(''); setMedia(null); event.target.reset()
+    } catch (cause) { setError(cause.message) } finally { setBusy(false) }
+  }
+
+  function mediaUrl(message) { return `${apiBaseUrl.replace(/\/api$/, '')}${message.mediaUrl || message.videoUrl}` }
+
+  return <div className="page-wrap"><header className="topbar"><div><p className="eyebrow">Private messages</p><h1>Chats</h1></div></header><div className="chat-layout"><section className="chat-friends"><label className="chat-search">⌕<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name or username" /></label>{query.trim().length >= 2 && results.map((person) => <div className="friend-result" key={person.id}><span className="mini-avatar avatar-user">{initialsFor(person.displayName)}</span><span><strong>{person.displayName}</strong><small>@{person.username}</small></span><button className="friend-action" type="button" onClick={() => friends.some((item) => item.id === person.id) ? selectFriend(person) : addFriend(person)}>{friends.some((item) => item.id === person.id) ? 'Open' : 'Add'}</button></div>)}<h3 className="friends-title">My friends</h3>{friends.map((person) => <button className={`friend-result ${friend?.id === person.id ? 'selected' : ''}`} key={person.id} type="button" onClick={() => selectFriend(person)}><span className="mini-avatar avatar-user">{initialsFor(person.displayName)}</span><span><strong>{person.displayName}</strong><small>@{person.username}</small></span></button>)}{!friends.length && !results.length && <p className="chat-hint">Search for someone and add them as a friend.</p>}</section><section className="chat-panel">{friend ? <><div className="chat-heading"><div className="mini-avatar avatar-user">{initialsFor(friend.displayName)}</div><div><strong>{friend.displayName}</strong><span>@{friend.username}</span></div></div><div className="message-list">{messages.length ? messages.map((message) => <div className={`message ${message.senderId === user.id ? 'mine' : ''}`} key={message.id}>{message.body && <p>{message.body}</p>}{(message.mediaUrl || message.videoUrl) && (message.mediaType || 'video/mp4').startsWith('image/') ? <img src={mediaUrl(message)} alt="Shared attachment" loading="lazy" /> : (message.mediaUrl || message.videoUrl) && <video controls preload="metadata" src={mediaUrl(message)} />}</div>) : <p className="chat-hint">No messages yet. Say hello.</p>}</div><form className="message-form" onSubmit={sendMessage}><input value={body} onChange={(event) => setBody(event.target.value)} placeholder="Write a message..." /><label className="video-button">＋ Media<input type="file" accept="image/png,image/jpeg,video/mp4,.png,.jpg,.jpeg,.mp4" onChange={(event) => setMedia(event.target.files[0] || null)} /></label><button className="primary-button" type="submit" disabled={busy || (!body.trim() && !media)}>{busy ? 'Sending...' : 'Send'} <span>→</span></button></form></> : <div className="chat-placeholder"><span>◌</span><h2>Your conversations</h2><p>Add a friend to start messaging.</p></div>}</section></div>{error && <p className="form-error feed-error">{error}</p>}</div>
 }
 
 function ChatView() {

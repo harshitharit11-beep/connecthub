@@ -26,6 +26,10 @@
 .chat-search input, .message-form input { width: 100%; color: var(--cream); background: transparent; border: 0; outline: 0; font-size: 11px; }
 .friend-result { display: flex; align-items: center; gap: 10px; width: 100%; color: var(--cream); text-align: left; border: 0; border-bottom: 1px solid var(--line); background: transparent; padding: 12px 5px; }
 .friend-result:hover, .friend-result.selected { background: #202722; }
+.friend-result { position: relative; }
+.friend-action { margin-left: auto; color: var(--lime); border: 1px solid #536132; border-radius: 5px; background: transparent; padding: 6px 8px; font-size: 10px; }
+.friend-action:hover { background: #536132; color: var(--cream); }
+.friends-title { color: var(--muted); font: 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; margin: 22px 5px 8px; }
 .friend-result > span:last-child, .chat-heading > div:last-child { display: grid; gap: 3px; }
 .friend-result small, .chat-heading span { color: var(--muted); font: 10px var(--mono); }
 .chat-hint { color: var(--muted); font-size: 11px; line-height: 1.6; text-align: center; padding: 25px 15px; }

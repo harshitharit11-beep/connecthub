@@ -19,8 +19,9 @@ Local development has a JSON user store and the default in-memory Express sessio
 - `users`: id, username, normalized username, display name, bcrypt password hash, profile image value, and creation time.
 - `posts`: id, owning user id, body, and creation time.
 - `messages`: id, sender, recipient, optional text, optional media URL/type, and creation time.
+- `friendships`: bidirectional user relationships and creation time.
 
-The JSON fallback stores posts in `server/data/posts.json` and messages in `server/data/messages.json`. Uploaded media is stored under `server/uploads`; production should use persistent object storage instead of the Render filesystem.
+The JSON fallback stores posts in `server/data/posts.json`, messages in `server/data/messages.json`, and friendships in `server/data/friendships.json`. Uploaded media is stored under `server/uploads`; production should use persistent object storage instead of the Render filesystem.
 
 ## Netlify deployment
 

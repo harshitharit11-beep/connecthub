@@ -7,7 +7,7 @@ import multer from 'multer'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { createMessage, createPost, createUser, deletePost, findUserById, findUserByUsername, initializeStore, listMessages, listPosts, searchUsers, sessionStore, usingDatabase } from './store.js'
+import { addFriend, createMessage, createPost, createUser, deletePost, findUserById, findUserByUsername, initializeStore, listFriends, listMessages, listPosts, searchUsers, sessionStore, usingDatabase } from './store.js'
 
 const app = express()
 const port = Number(process.env.PORT || 3001)
@@ -150,6 +150,26 @@ app.get('/api/users/search', async (req, res, next) => {
     const query = String(req.query.q || '').trim()
     if (query.length < 2) return res.json({ users: [] })
     res.json({ users: await searchUsers(query, user.id) })
+  } catch (error) { next(error) }
+})
+
+app.get('/api/friends', async (req, res, next) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) return res.status(401).json({ error: 'Not authenticated' })
+    res.json({ friends: await listFriends(user.id) })
+  } catch (error) { next(error) }
+})
+
+app.post('/api/friends/:userId', async (req, res, next) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) return res.status(401).json({ error: 'Not authenticated' })
+    if (user.id === req.params.userId) return res.status(400).json({ error: 'You cannot add yourself.' })
+    const friend = await findUserById(req.params.userId)
+    if (!friend) return res.status(404).json({ error: 'User not found.' })
+    await addFriend(user.id, friend.id)
+    res.status(201).json({ friend: publicUser(friend) })
   } catch (error) { next(error) }
 })
 

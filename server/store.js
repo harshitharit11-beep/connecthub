@@ -9,6 +9,7 @@ const { Pool } = pg
 const dataPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'users.json')
 const postsPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'posts.json')
 const messagesPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'messages.json')
+const friendshipsPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'friendships.json')
 const pool = process.env.DATABASE_URL ? new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined }) : null
 
 export async function initializeStore() {
@@ -45,6 +46,15 @@ export async function initializeStore() {
       )
     `)
     await pool.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_type TEXT')
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS friendships (
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        friend_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY (user_id, friend_id),
+        CHECK (user_id <> friend_id)
+      )
+    `)
   }
 }
 
@@ -79,6 +89,42 @@ export async function searchUsers(query, currentUserId) {
     .filter((user) => user.id !== currentUserId && (user.usernameNormalized.includes(normalizedQuery) || user.displayName.toLowerCase().includes(normalizedQuery)))
     .slice(0, 20)
     .map(publicPostUser)
+}
+
+export async function listFriends(userId) {
+  if (pool) {
+    const { rows } = await pool.query(
+      `SELECT users.* FROM users JOIN friendships ON friendships.friend_id = users.id
+       WHERE friendships.user_id = $1 ORDER BY users.display_name`,
+      [userId],
+    )
+    return rows.map(publicPostUser)
+  }
+  const [friendships, users] = await Promise.all([readFriendships(), readUsers()])
+  const usersById = new Map(users.map((user) => [user.id, user]))
+  return friendships
+    .filter((friendship) => friendship.userId === userId)
+    .map((friendship) => usersById.get(friendship.friendId))
+    .filter(Boolean)
+    .sort((left, right) => left.displayName.localeCompare(right.displayName))
+    .map(publicPostUser)
+}
+
+export async function addFriend(userId, friendId) {
+  if (pool) {
+    await pool.query(
+      `INSERT INTO friendships (user_id, friend_id, created_at)
+       VALUES ($1, $2, $3), ($2, $1, $3) ON CONFLICT DO NOTHING`,
+      [userId, friendId, new Date().toISOString()],
+    )
+    return
+  }
+  const friendships = await readFriendships()
+  const now = new Date().toISOString()
+  for (const pair of [{ userId, friendId }, { userId: friendId, friendId: userId }]) {
+    if (!friendships.some((item) => item.userId === pair.userId && item.friendId === pair.friendId)) friendships.push({ ...pair, createdAt: now })
+  }
+  await writeFriendships(friendships)
 }
 
 export async function createUser(user) {
@@ -202,6 +248,15 @@ async function readMessages() {
 async function writeMessages(messages) {
   await fs.mkdir(path.dirname(messagesPath), { recursive: true })
   await fs.writeFile(messagesPath, JSON.stringify(messages, null, 2))
+}
+
+async function readFriendships() {
+  try { return JSON.parse(await fs.readFile(friendshipsPath, 'utf8')) } catch { return [] }
+}
+
+async function writeFriendships(friendships) {
+  await fs.mkdir(path.dirname(friendshipsPath), { recursive: true })
+  await fs.writeFile(friendshipsPath, JSON.stringify(friendships, null, 2))
 }
 
 function publicPostUser(user) {
