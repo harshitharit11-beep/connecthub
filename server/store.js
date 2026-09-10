@@ -39,10 +39,12 @@ export async function initializeStore() {
         recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         body TEXT,
         video_url TEXT,
+        media_type TEXT,
         created_at TIMESTAMPTZ NOT NULL,
         CHECK (body IS NOT NULL OR video_url IS NOT NULL)
       )
     `)
+    await pool.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_type TEXT')
   }
 }
 
@@ -164,8 +166,8 @@ export async function listMessages(userId, otherUserId) {
 export async function createMessage(message) {
   if (pool) {
     await pool.query(
-      'INSERT INTO messages (id, sender_id, recipient_id, body, video_url, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
-      [message.id, message.senderId, message.recipientId, message.body, message.videoUrl, message.createdAt],
+      'INSERT INTO messages (id, sender_id, recipient_id, body, video_url, media_type, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [message.id, message.senderId, message.recipientId, message.body, message.mediaUrl, message.mediaType, message.createdAt],
     )
     return message
   }
@@ -221,7 +223,8 @@ function fromDatabaseMessage(row) {
     senderId: row.sender_id,
     recipientId: row.recipient_id,
     body: row.body,
-    videoUrl: row.video_url,
+    mediaUrl: row.video_url,
+    mediaType: row.media_type || (row.video_url ? 'video/mp4' : null),
     createdAt: row.created_at,
     sender: { username: row.sender_username, displayName: row.sender_display_name },
     recipient: { username: row.recipient_username, displayName: row.recipient_display_name },

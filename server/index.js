@@ -25,7 +25,7 @@ const uploadDirectory = path.join(process.cwd(), 'server', 'uploads')
 const upload = multer({
   dest: uploadDirectory,
   limits: { fileSize: 50 * 1024 * 1024 },
-  fileFilter: (_req, file, callback) => callback((file.mimetype === 'video/mp4' || path.extname(file.originalname).toLowerCase() === '.mp4') ? null : new Error('File type is not supported.'), false),
+  fileFilter: (_req, file, callback) => callback((['video/mp4', 'image/png', 'image/jpeg'].includes(file.mimetype) || ['.mp4', '.png', '.jpg', '.jpeg'].includes(path.extname(file.originalname).toLowerCase())) ? null : new Error('File type is not supported.'), false),
 })
 
 app.set('trust proxy', 1)
@@ -162,24 +162,24 @@ app.get('/api/messages/:userId', async (req, res, next) => {
   } catch (error) { next(error) }
 })
 
-app.post('/api/messages/:userId', upload.single('video'), async (req, res, next) => {
+app.post('/api/messages/:userId', upload.single('media'), async (req, res, next) => {
   try {
     const user = await authenticatedUser(req)
     if (!user) return res.status(401).json({ error: 'Not authenticated' })
     const recipient = await findUserById(req.params.userId)
     if (!recipient) return res.status(404).json({ error: 'Friend not found.' })
     const body = String(req.body.body || '').trim()
-    if (!body && !req.file) return res.status(400).json({ error: 'Write a message or attach an MP4 video.' })
+    if (!body && !req.file) return res.status(400).json({ error: 'Write a message or attach a JPG, PNG, or MP4 file.' })
     const message = {
       id: randomUUID(), senderId: user.id, recipientId: recipient.id, body: body || null,
-      videoUrl: req.file ? `/uploads/${req.file.filename}` : null, createdAt: new Date().toISOString(),
+      mediaUrl: req.file ? `/uploads/${req.file.filename}` : null, mediaType: req.file?.mimetype || null, createdAt: new Date().toISOString(),
     }
     await createMessage(message)
     res.status(201).json({ message })
   } catch (error) {
     if (req.file) await fs.rm(req.file.path, { force: true }).catch(() => {})
     if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'MP4 videos must be 50 MB or smaller.' })
-    if (error.message?.includes('File type')) return res.status(400).json({ error: 'Only MP4 video files are supported.' })
+    if (error.message?.includes('File type')) return res.status(400).json({ error: 'Only JPG, PNG, and MP4 files are supported.' })
     next(error)
   }
 })
@@ -187,9 +187,10 @@ app.post('/api/messages/:userId', upload.single('video'), async (req, res, next)
 app.use((error, _req, res, _next) => {
   console.error(error)
   if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'MP4 videos must be 50 MB or smaller.' })
-  if (error.message === 'File type is not supported.') return res.status(400).json({ error: 'Only MP4 video files are supported.' })
+  if (error.message === 'File type is not supported.') return res.status(400).json({ error: 'Only JPG, PNG, and MP4 files are supported.' })
   res.status(500).json({ error: 'Internal server error.' })
 })
 
+await fs.mkdir(uploadDirectory, { recursive: true })
 await initializeStore()
 app.listen(port, '0.0.0.0', () => console.log(`ConnectHub API listening on port ${port} (${usingDatabase ? 'PostgreSQL' : 'JSON fallback'})`))

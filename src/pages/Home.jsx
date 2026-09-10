@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 function getApiBaseUrl() {
@@ -94,14 +93,15 @@ function ChatView() {
   const [friend, setFriend] = useState(null)
   const [messages, setMessages] = useState([])
   const [body, setBody] = useState('')
-  const [video, setVideo] = useState(null)
+  const [media, setMedia] = useState(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     if (query.trim().length < 2) { setFriends([]); return undefined }
-    const timer = setTimeout(() => fetch(`${apiBaseUrl}/users/search?q=${encodeURIComponent(query)}`, { credentials: 'include' }).then(readResponse).then((data) => setFriends(data.users || [])).catch((cause) => setError(cause.message)), 250)
-    return () => clearTimeout(timer)
+    const controller = new AbortController()
+    const timer = setTimeout(() => fetch(`${apiBaseUrl}/users/search?q=${encodeURIComponent(query)}`, { credentials: 'include', signal: controller.signal }).then(readResponse).then((data) => setFriends(data.users || [])).catch((cause) => { if (cause.name !== 'AbortError') setError(cause.message) }), 250)
+    return () => { clearTimeout(timer); controller.abort() }
   }, [query])
 
   useEffect(() => {
@@ -111,17 +111,17 @@ function ChatView() {
 
   async function sendMessage(event) {
     event.preventDefault()
-    if (!friend || (!body.trim() && !video) || busy) return
+    if (!friend || (!body.trim() && !media) || busy) return
     setBusy(true); setError('')
     const form = new FormData()
     if (body.trim()) form.append('body', body)
-    if (video) form.append('video', video)
+    if (media) form.append('media', media)
     try {
       const response = await fetch(`${apiBaseUrl}/messages/${friend.id}`, { method: 'POST', credentials: 'include', body: form })
       const data = await readResponse(response)
-      setMessages((current) => [...current, data.message]); setBody(''); setVideo(null); event.target.reset()
+      setMessages((current) => [...current, data.message]); setBody(''); setMedia(null); event.target.reset()
     } catch (cause) { setError(cause.message) } finally { setBusy(false) }
   }
 
-  return <div className="page-wrap"><header className="topbar"><div><p className="eyebrow">Private messages</p><h1>Chats</h1></div></header><div className="chat-layout"><section className="chat-friends"><label className="chat-search">⌕<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name or username" /></label>{friends.map((person) => <button className={`friend-result ${friend?.id === person.id ? 'selected' : ''}`} key={person.id} type="button" onClick={() => { setFriend(person); setQuery(''); setFriends([]) }}><span className="mini-avatar avatar-jules">{initialsFor(person.displayName)}</span><span><strong>{person.displayName}</strong><small>@{person.username}</small></span></button>)}{!friend && <p className="chat-hint">Search for a real member to start a conversation.</p>}</section><section className="chat-panel">{friend ? <><div className="chat-heading"><div className="mini-avatar avatar-jules">{initialsFor(friend.displayName)}</div><div><strong>{friend.displayName}</strong><span>@{friend.username}</span></div></div><div className="message-list">{messages.length ? messages.map((message) => <div className={`message ${message.senderId === user.id ? 'mine' : ''}`} key={message.id}>{message.body && <p>{message.body}</p>}{message.videoUrl && <video controls src={`${apiBaseUrl.replace(/\/api$/, '')}${message.videoUrl}`} />}</div>) : <p className="chat-hint">No messages yet. Say hello.</p>}</div><form className="message-form" onSubmit={sendMessage}><input value={body} onChange={(event) => setBody(event.target.value)} placeholder="Write a message..." /><label className="video-button">＋ MP4<input type="file" accept="video/mp4,.mp4" onChange={(event) => setVideo(event.target.files[0] || null)} /></label><button className="primary-button" type="submit" disabled={busy || (!body.trim() && !video)}>{busy ? 'Sending...' : 'Send'} <span>→</span></button></form></> : <div className="chat-placeholder"><span>◌</span><h2>Your conversations</h2><p>Find a friend to send messages and MP4 videos.</p></div>}</section></div>{error && <p className="form-error feed-error">{error}</p>}</div>
+  return <div className="page-wrap"><header className="topbar"><div><p className="eyebrow">Private messages</p><h1>Chats</h1></div></header><div className="chat-layout"><section className="chat-friends"><label className="chat-search">⌕<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name or username" /></label>{friends.map((person) => <button className={`friend-result ${friend?.id === person.id ? 'selected' : ''}`} key={person.id} type="button" onClick={() => { setFriend(person); setQuery(''); setFriends([]) }}><span className="mini-avatar avatar-user">{initialsFor(person.displayName)}</span><span><strong>{person.displayName}</strong><small>@{person.username}</small></span></button>)}{!friend && <p className="chat-hint">Search for a real member to start a conversation.</p>}</section><section className="chat-panel">{friend ? <><div className="chat-heading"><div className="mini-avatar avatar-user">{initialsFor(friend.displayName)}</div><div><strong>{friend.displayName}</strong><span>@{friend.username}</span></div></div><div className="message-list">{messages.length ? messages.map((message) => <div className={`message ${message.senderId === user.id ? 'mine' : ''}`} key={message.id}>{message.body && <p>{message.body}</p>}{(message.mediaUrl || message.videoUrl) && (message.mediaType || 'video/mp4').startsWith('image/') ? <img src={`${apiBaseUrl.replace(/\/api$/, '')}${message.mediaUrl || message.videoUrl}`} alt="Shared attachment" loading="lazy" /> : (message.mediaUrl || message.videoUrl) && <video controls preload="metadata" src={`${apiBaseUrl.replace(/\/api$/, '')}${message.mediaUrl || message.videoUrl}`} />}</div>) : <p className="chat-hint">No messages yet. Say hello.</p>}</div><form className="message-form" onSubmit={sendMessage}><input value={body} onChange={(event) => setBody(event.target.value)} placeholder="Write a message..." /><label className="video-button">＋ Media<input type="file" accept="image/png,image/jpeg,video/mp4,.png,.jpg,.jpeg,.mp4" onChange={(event) => setMedia(event.target.files[0] || null)} /></label><button className="primary-button" type="submit" disabled={busy || (!body.trim() && !media)}>{busy ? 'Sending...' : 'Send'} <span>→</span></button></form></> : <div className="chat-placeholder"><span>◌</span><h2>Your conversations</h2><p>Find a friend to send messages, JPG, PNG, and MP4 files.</p></div>}</section></div>{error && <p className="form-error feed-error">{error}</p>}</div>
 }

@@ -35,7 +35,7 @@
 .message { justify-self: start; max-width: 76%; color: var(--cream); background: #202722; border-radius: 8px 8px 8px 2px; padding: 9px 12px; font-size: 12px; }
 .message.mine { justify-self: end; background: #536132; border-radius: 8px 8px 2px 8px; }
 .message p { margin: 0; white-space: pre-wrap; }
-.message video { display: block; max-width: 100%; max-height: 260px; margin-top: 7px; }
+.message video, .message img { display: block; max-width: 100%; max-height: 260px; margin-top: 7px; border-radius: 5px; object-fit: contain; }
 .message-form { display: flex; align-items: center; gap: 8px; padding: 12px; border-top: 1px solid var(--line); }
 .message-form .primary-button { padding: 10px 12px; white-space: nowrap; }
 .video-button { color: var(--lime); border: 1px solid var(--line); border-radius: 6px; padding: 9px; font-size: 10px; white-space: nowrap; cursor: pointer; }
@@ -44,5 +44,16 @@
 .chat-placeholder > span { color: var(--lime); font-size: 30px; }
 .chat-placeholder h2 { color: var(--cream); font-size: 20px; margin: 14px 0 7px; }
 .chat-placeholder p { font-size: 12px; }
+.page-wrap { animation: page-enter .32s ease-out both; }
+.post-card, .feed-empty, .chat-panel, .chat-friends { animation: rise-in .35s ease-out both; }
+.post-card:nth-child(2) { animation-delay: .04s; }
+.post-card:nth-child(3) { animation-delay: .08s; }
+.message { animation: message-in .22s ease-out both; }
+.primary-button:not(:disabled), .composer-action:not(:disabled), .video-button { transition: transform .18s ease, filter .18s ease; }
+.primary-button:not(:disabled):hover, .composer-action:not(:disabled):hover, .video-button:hover { transform: translateY(-1px); filter: brightness(1.08); }
+@keyframes page-enter { from { opacity: 0; } to { opacity: 1; } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes message-in { from { opacity: 0; transform: scale(.98) translateY(4px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
 @media (max-width: 900px) { .chat-layout { grid-template-columns: 1fr; }.chat-friends { min-height: auto; }.chat-panel { min-height: 520px; } }
 @media (max-width: 520px) { .message-form { flex-wrap: wrap; }.message-form input { flex: 1 1 100%; }.message-form .primary-button { flex: 1; } }

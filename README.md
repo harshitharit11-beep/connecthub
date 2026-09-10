@@ -1,6 +1,6 @@
 # ConnectHub
 
-ConnectHub is a Vite + React frontend with an Express API for authentication, real posts, friend search, direct messages, and MP4 video messages. The current implementation includes signup, login, logout, session restore, creating posts, loading the real feed, deleting owned posts, searching members, and private chat. Chats support MP4 uploads up to 50 MB.
+ConnectHub is a Vite + React frontend with an Express API for authentication, real posts, friend search, direct messages, and media messages. The current implementation includes signup, login, logout, session restore, creating posts, loading the real feed, deleting owned posts, searching members, and private chat. Chats support JPG, PNG, and MP4 uploads up to 50 MB.
 
 ## Local development
 
@@ -18,9 +18,9 @@ Local development has a JSON user store and the default in-memory Express sessio
 
 - `users`: id, username, normalized username, display name, bcrypt password hash, profile image value, and creation time.
 - `posts`: id, owning user id, body, and creation time.
-- `messages`: id, sender, recipient, optional text, optional MP4 URL, and creation time.
+- `messages`: id, sender, recipient, optional text, optional media URL/type, and creation time.
 
-The JSON fallback stores posts in `server/data/posts.json`. The current project does not upload or store photos/videos and has no chat/message data model. Those features need separate API routes, tables, and object storage before their UI can be production-ready.
+The JSON fallback stores posts in `server/data/posts.json` and messages in `server/data/messages.json`. Uploaded media is stored under `server/uploads`; production should use persistent object storage instead of the Render filesystem.
 
 ## Netlify deployment
 
