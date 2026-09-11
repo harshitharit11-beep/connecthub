@@ -93,8 +93,9 @@ function PersistentChatView() {
   const [results, setResults] = useState([])
   const [friend, setFriend] = useState(null)
   const [messages, setMessages] = useState([])
-  const [body, setBody] = useState('')
-  const [media, setMedia] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [uploadingMedia, setUploadingMedia] = useState(false)
+  const [selectedFile, setSelectedFile] = useState(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [uploadingMedia, setUploadingMedia] = useState(false)
@@ -159,22 +160,22 @@ function PersistentChatView() {
 
   async function sendMessage(event) {
     event.preventDefault()
-    if (!friend || (!body.trim() && !media) || busy) return
+    if (!friend || (!body.trim() && !selectedFile) || busy) return
     setBusy(true); setError('')
     try {
       let uploadedMedia = null
-      if (media) {
+      if (selectedFile) {
         setUploadingMedia(true)
-        const form = new FormData()
-        form.append('media', media)
-        uploadedMedia = await readResponse(await fetch(`${apiBaseUrl}/media/upload`, { method: 'POST', credentials: 'include', body: form }))
+        const formData = new FormData()
+        formData.append('media', selectedFile)
+        uploadedMedia = await readResponse(await fetch(`${apiBaseUrl}/media/upload`, { method: 'POST', credentials: 'include', body: formData }))
         setUploadingMedia(false)
       }
       const data = await readResponse(await fetch(`${apiBaseUrl}/messages/${friend.id}`, {
         method: 'POST', credentials: 'include', headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
         body: JSON.stringify({ body: body.trim() || null, mediaUrl: uploadedMedia?.url || null, mediaType: uploadedMedia?.mimeType || null, fileName: uploadedMedia?.originalName || null, type: uploadedMedia?.type || 'text' }),
       }))
-      setMessages((current) => [...current, data.message]); setBody(''); setMedia(null); event.target.reset()
+      setMessages((current) => [...current, data.message]); setBody(''); setSelectedFile(null); event.target.reset()
     } catch (cause) { setError(cause.message) } finally { setUploadingMedia(false); setBusy(false) }
   }
 
@@ -185,7 +186,7 @@ function PersistentChatView() {
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'video/mp4']
     if (!allowedTypes.includes(file.type)) return setError('Only JPG, PNG and MP4 files are allowed.')
     if (file.size > 50 * 1024 * 1024) return setError('File is too large. Maximum size is 50 MB.')
-    setError(''); setMedia(file)
+    setError(''); setSelectedFile(file)
   }
 
   function mediaUrl(message) { return `${apiBaseUrl.replace(/\/api$/, '')}${message.mediaUrl || message.videoUrl}` }
